@@ -31,6 +31,10 @@ and were checked live on a real server (see the commit history).
 9. **Stale targets.** The member list captured at command time was used up to 5 minutes later. The
    scan now reruns at Confirm.
 10. **Expired confirmations were never pruned** from memory. They are pruned on every interaction.
+11. **Logged errors could leak an interaction token.** discord.js REST errors carry the full URL,
+    which for interaction replies is `/webhooks/<appId>/<interactionToken>/…`, and the logger
+    printed it. URLs and every log line are now redacted (webhook/interaction tokens and anything
+    shaped like a bot token).
 
 ## Risks addressed
 
@@ -55,7 +59,9 @@ and were checked live on a real server (see the commit history).
   alone: the server owner…"), instead of only as counts in the log.
 - dotenv was replaced by Node's `--env-file-if-exists`. The only dependency is discord.js 14.27.0
   (latest stable; v15 is still in development). Node >= 22.12.
-- `npm test` runs 21 offline tests (node:test plus a small fake of the discord.js surface).
+- `npm test` runs 23 offline tests (node:test plus a small fake of the discord.js surface).
+- Live-tested on 2026-10-12 on a real server: cancel, confirm (double click ran once), the owner
+  reported as left alone, second run, restart, rollback restoring the original (empty) nickname.
 
 ## Remaining limits
 
