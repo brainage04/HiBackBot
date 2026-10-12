@@ -1,49 +1,84 @@
-# About
+# HiBackBot
 
-Discord bot I made as part of a running joke between me and my friends (people would go afk -> come back and say "I'm back" -> people would say "hi back" as a funny dad joke)
+Discord bot I made as part of a running joke between me and my friends (people would go AFK, come
+back and say "I'm back", and people would say "hi back" as a dad joke).
 
-Commands:
-- `/setallback` asks for confirmation, then sets manageable member nicknames to `back`.
-- `/rollbackback` asks for confirmation, then restores nicknames from the latest backup.
+## Commands
+
+Both commands are for server administrators only, reply only to you (ephemeral), and change nothing
+until you click **Confirm** within 5 minutes. Only the person who ran the command can click the buttons.
+
+- `/setallback` renames every member the bot can manage to `back`. It tells you who it leaves alone:
+  members already called `back`, the server owner (Discord never lets bots rename the owner) and
+  members whose highest role is at or above the bot's. Each member's previous nickname is saved first.
+- `/rollbackback` restores the saved nicknames, but only for members still called `back`. Anyone
+  who renamed themselves since keeps their new name. Entries that couldn't be restored (Discord
+  error) stay in the backup for the next `/rollbackback`; the backup is deleted once everything
+  is restored.
+
+Running `/setallback` again adds the newly renamed members to the same backup, so one
+`/rollbackback` undoes all runs. Only one run at a time per server. On a big server the reply shows
+progress; if a run takes longer than Discord's 14-minute window for the reply, the result is sent by DM.
 
 ## Setup
 
-1. Install dependencies:
+Requires Node.js 22.12 or later (24 LTS recommended).
+
+1. In the [Developer Portal](https://discord.com/developers/applications), on the application's
+   **Bot** page, enable **Server Members Intent** (the bot lists every member) and copy the token.
+2. Install and configure:
+
+   ```bash
+   npm install
+   cp .env.example .env   # then fill it in
+   ```
+
+   | Variable | Required | Meaning |
+   |---|---|---|
+   | `DISCORD_TOKEN` | yes | Bot token. Keep it secret (`.env` is gitignored). |
+   | `CLIENT_ID` | for deploy | Application ID. |
+   | `GUILD_ID` | no | Deploy commands to this server only (instant, for testing). Unset = global. |
+   | `DATA_DIR` | no | Where backups are stored. Default: `data/` in the project. |
+   | `LOG_LEVEL` | no | `error`, `warn`, `info` (default) or `debug`. |
+   | `LOG_MEMBER_DETAILS` | no | `true` logs each member's scan decision (with `LOG_LEVEL=debug`). |
+
+   Variables already set in the environment take precedence over `.env`.
+3. Invite the bot with the `bot` and `applications.commands` scopes and the **Manage Nicknames**
+   permission (`permissions=134217728`):
+
+   ```
+   https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&scope=bot+applications.commands&permissions=134217728
+   ```
+
+   Then, in **Server Settings → Roles**, drag the bot's role above every role whose members it
+   should rename. It can only rename members whose highest role is below its own.
+4. Register the slash commands, then start the bot:
+
+   ```bash
+   npm run deploy
+   npm start
+   ```
+
+## Data
+
+Backups are JSON files at `data/backup-<guildId>.json` (or under `DATA_DIR`), one per server,
+written atomically. They hold user IDs, usernames and previous nicknames. Keep `data/` when moving
+or redeploying the bot, or `/rollbackback` can't undo earlier runs.
+
+## Running it permanently
+
+Use a supervisor that restarts the bot: the bot exits on an unexpected error rather than keep
+running in an unknown state. For example a systemd service with `Restart=on-failure`,
+`WorkingDirectory=` set to the project and `ExecStart=/usr/bin/env npm start`.
+
+## Development
+
 ```bash
-npm install
-```
-2. Create env file:
-```bash
-cp .env.example .env
-```
-3. Fill in `.env`:
-- `DISCORD_TOKEN`: bot token
-- `CLIENT_ID`: application ID
-- `GUILD_ID`: test server ID
-- `LOG_LEVEL`: `error` | `warn` | `info` | `debug`
-- `LOG_MEMBER_DETAILS`: `true` to log per-member filtering reasons for `/setallback`
-
-## Invite Permissions
-
-In the `Overview > Bot` tab, enable:
-- `Server Members Intent`
-
-## Register Commands
-
-```bash
-npm run deploy
+npm test
 ```
 
-## Start
-
-```bash
-npm start
-```
-
-## Notes
-
-- "Manageable" members refers to members with a highest priority role lower than the bot's highest priority role. (Priority referring to the ordering of roles in the `People > Roles` tab in your server's `Server Settings`)
-- Backups are stored at `data/backup-<guildId>.json`.
-- `/rollbackback` restores only users listed in the latest backup file.
-- Commands can only be used by server administrators (limited by command permissions, and runtime checks - just in case).
-- If you are running this bot yourself and are troubleshooting, it may help to set `LOG_LEVEL=debug` and `LOG_MEMBER_DETAILS=true` for more detailed logs and member details respectively.
+The tests run offline against a small fake of discord.js (`test/fakes.js`). Code layout:
+`src/index.js` (startup), `src/handler.js` (interactions, confirmation, per-server lock, progress),
+`src/nicknames.js` (scan, rename, rollback), `src/backupStore.js`, `src/commands.js` (definitions,
+shared with `src/deploy-commands.js`). See `REVIEW.md` for the code review and recommendations
+for future bots.
